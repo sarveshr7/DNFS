@@ -1,0 +1,8 @@
+all: server
+
+server: server.c
+	gcc -Wall server.c `pkg-config fuse --cflags --libs` -o server
+
+clean:
+	\rm -f server
+
