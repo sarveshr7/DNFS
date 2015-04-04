@@ -47,8 +47,26 @@ typedef struct node{
 	struct node* next;		// Pointer to sibling
 }node; 
 
+typedef struct qnode{
+	node* fsnode;
+	void* qdata;
+	struct qnode* next;
+}qnode;
+
+typedef struct queue
+{
+	qnode* head;
+	qnode* tail;
+	int cnt;
+}queue; 
+
 char* rootpath;
 node* root;
+char* imagename = "image1";
+queue* traverse;
+queue* printqueue;
+queue* readqueue;
+queue* expandqueue;
 
 node* createnode()
 {
@@ -60,6 +78,170 @@ node* createnode()
 	//newnode->data = malloc(1);
 	newnode->n_child = 0;
 	return newnode;
+}
+
+/*********Queue functions********/
+
+
+void initqueue(queue* q)
+{
+	q->head = NULL;
+	q->tail = NULL;
+	q->cnt = 0;
+}
+
+void enqueue(queue* q,node* fsdata)
+{
+	//	printf("\n In enqueue");
+	qnode* newqnode;
+	newqnode = malloc(sizeof(qnode));
+	newqnode->fsnode = fsdata;
+	newqnode->next = NULL;
+	
+	if(NULL == q->head)
+	{
+		q->head = newqnode;
+		q->tail = newqnode;
+		q->cnt++;
+	}
+	
+	else
+	{
+		q->tail->next = newqnode;
+		q->tail = q->tail->next;
+		q->cnt++;
+	}
+}
+
+int isempty(queue* q)
+{
+	 if(q->head==NULL)
+		return 1;
+	return 0;
+}
+
+void dequeue(queue* q)
+{
+	qnode* temp;
+	if(q->head == NULL)
+		return;
+		
+	if(q->head->next == NULL)
+	{
+		temp = q->head;
+		q->head =NULL;
+		q->tail = NULL;
+		q->cnt--;
+		free(temp);
+	}
+	else
+	{
+		temp = q->head;
+		q->head = q->head->next;
+		q->cnt--;
+		free(temp);
+	}
+	return;
+}
+
+void print_queue(queue* q)
+{
+	qnode* temp;
+	temp = q->head;
+	printf("\n");
+	while(temp != NULL)
+	{
+		printf("%s->",temp->fsnode->name);
+		temp = temp->next;
+	}
+	printf("NULL\n");
+}
+
+void createqueue()
+{
+	traverse = malloc(sizeof(queue));
+	initqueue(traverse);
+	enqueue(traverse,root);
+	
+	printqueue = malloc(sizeof(queue));
+	initqueue(printqueue);
+	
+	//printf("\n\n Head name : %s",traverse->head->fsnode->name);
+	
+	node* itr;
+	while(!isempty(traverse))
+	{
+		itr = traverse->head->fsnode;
+		enqueue(printqueue,itr);
+		dequeue(traverse);
+		
+		itr = itr->child;
+		while(itr)
+		{
+			enqueue(traverse,itr);
+			itr = itr->next;
+		}
+	}
+	print_queue(printqueue);
+
+}
+
+void writefile()
+{
+	printf("\n In writefile");
+	int name_len,type_len,data_len;
+	int yes = 1, no = 0;
+    FILE* fp;
+	fp = fopen(imagename,"w");
+	if(fp == NULL)
+		printf("Error: File open error ");
+		
+	createqueue();
+	//Write the number of nodes in the file
+	int cnt1 = printqueue->cnt;
+	fwrite(&cnt1,sizeof(int),1,fp);
+		
+	//Write data to the file
+	qnode* q_itr;
+	node* itr;
+	q_itr = printqueue->head;
+	while(q_itr != NULL)
+	{
+		itr = q_itr->fsnode;
+		
+		//Name
+		name_len = strlen(itr->name);
+		fwrite(&name_len,sizeof(int),1,fp);
+		fwrite (itr->name, name_len + 1, 1, fp);
+		
+		//Type
+		type_len = strlen(itr->type);
+		fwrite(&type_len,sizeof(int),1,fp);
+		fwrite (itr->type, type_len + 1, 1, fp);
+		
+		//Data
+		data_len = strlen("data");
+		fwrite(&data_len,sizeof(int),1,fp);
+		fwrite ("data", data_len+1, 1, fp);
+		
+		//Child
+		if(itr->child == NULL)
+			fwrite(&no,sizeof(int),1,fp);
+		else
+			fwrite(&yes,sizeof(int),1,fp);
+		
+		//Next
+		if(itr->next == NULL)
+			fwrite(&no,sizeof(int),1,fp);
+		else
+			fwrite(&yes,sizeof(int),1,fp);
+			
+		//Number of children
+		fwrite(&itr->n_child,sizeof(int),1,fp);
+		
+		q_itr = q_itr->next;
+	}
+	fclose(fp);
 }
 
 /*********Node functions*********/
@@ -380,6 +562,7 @@ static int xmp_mknod(const char *path, mode_t mode, dev_t rdev)
 		//printf("\n In mkdir parent : %s \n",parent->name);
 		//printf("\n Parent address : %d",(int*)parent);
 		addchild(parent,newpath,"reg");
+		writefile();
 	}
 	return 0;
 }
@@ -411,6 +594,7 @@ static int xmp_mkdir(const char *path, mode_t mode)
 		//printf("\n In mkdir parent : %s \n",parent->name);
 		//printf("\n Parent address : %d",(int*)parent);
 		addchild(parent,newpath,"dir");
+		writefile();
 	}
 	return 0;
 }
@@ -661,6 +845,64 @@ static int xmp_fsync(const char *path, int isdatasync,
 	return 0;
 }
 
+
+void xmp_destroy(void *userdata)
+{
+    printf("\n In destroy\n");
+	int name_len,type_len,data_len;
+	int yes = 1, no = 0;
+    FILE* fp;
+	fp = fopen(imagename,"w");
+	if(fp == NULL)
+		printf("Error: File open error ");
+		
+	createqueue();
+	//Write the number of nodes in the file
+	int cnt1 = printqueue->cnt;
+	fwrite(&cnt1,sizeof(int),1,fp);
+		
+	//Write data to the file
+	qnode* q_itr;
+	node* itr;
+	q_itr = printqueue->head;
+	while(q_itr != NULL)
+	{
+		itr = q_itr->fsnode;
+		
+		//Name
+		name_len = strlen(itr->name);
+		fwrite(&name_len,sizeof(int),1,fp);
+		fwrite (itr->name, name_len + 1, 1, fp);
+		
+		//Type
+		type_len = strlen(itr->type);
+		fwrite(&type_len,sizeof(int),1,fp);
+		fwrite (itr->type, type_len + 1, 1, fp);
+		
+		//Data
+		data_len = strlen("data");
+		fwrite(&data_len,sizeof(int),1,fp);
+		fwrite ("data", data_len+1, 1, fp);
+		
+		//Child
+		if(itr->child == NULL)
+			fwrite(&no,sizeof(int),1,fp);
+		else
+			fwrite(&yes,sizeof(int),1,fp);
+		
+		//Next
+		if(itr->next == NULL)
+			fwrite(&no,sizeof(int),1,fp);
+		else
+			fwrite(&yes,sizeof(int),1,fp);
+			
+		//Number of children
+		fwrite(&itr->n_child,sizeof(int),1,fp);
+		
+		q_itr = q_itr->next;
+	}
+}
+
 #ifdef HAVE_POSIX_FALLOCATE
 static int xmp_fallocate(const char *path, int mode,
 			off_t offset, off_t length, struct fuse_file_info *fi)
@@ -736,6 +978,7 @@ static struct fuse_operations xmp_oper = {
 	.chmod		= xmp_chmod,
 	.chown		= xmp_chown,
 	.truncate	= xmp_truncate,
+	.destroy	= xmp_destroy,
 #ifdef HAVE_UTIMENSAT
 	.utimens	= xmp_utimens,
 #endif
