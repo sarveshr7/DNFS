@@ -62,7 +62,7 @@ typedef struct queue
 
 char* rootpath;
 node* root;
-char* imagename = "image1";
+char* imagename = "img2";
 queue* traverse;
 queue* printqueue;
 queue* readqueue;
